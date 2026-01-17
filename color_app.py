@@ -1,111 +1,135 @@
 import streamlit as st
 from PIL import Image
 import numpy as np
-import joblib
-import os
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.preprocessing import LabelEncoder
 import matplotlib.colors as mcolors
 
-#  Cấu hình trang
-st.set_page_config(page_title="Personal Color ", layout="wide")
+# CẤU HÌNH TRANG
 
-#  CSS để tạo giao diện Kính mờ (Glassmorphism) cực đẹp
-st.markdown("""
-    <style>
-    .stApp { background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%); }
-    .main-card {
-        background: rgba(255, 255, 255, 0.4);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-radius: 35px;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        padding: 40px;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        margin-top: 20px;
+st.set_page_config("Personal Color", layout="wide")
+st.title("Personal Color ")
+
+
+# BẢNG MÀU
+
+SEASON_PALETTE = {
+    "Spring": [
+        "#E63F31", "#E75E75", "#EC6B7B", "#F47C90", "#FCCCBE",
+        "#834C72", "#A856A0", "#B75697", "#D67CAA", "#D59CC3",
+        "#FFE656", "#FFF2A1", "#FEFACF", "#96BE5C", "#C0D25F"
+    ],
+    "Summer": [
+        "#3A3067", "#7A51A1", "#8A65AC", "#9891C5",
+        "#BFBEBC", "#D8D5D3",
+        "#BC3160", "#D6305D", "#E92778", "#F166A7",
+        "#529DD4", "#ACD1EB",
+        "#0AB592", "#80C2A4", "#A5D8B8"
+    ],
+    "Autumn": [
+        "#245A76", "#0A8281", "#16A48D",
+        "#114421", "#176031", "#537F3A",
+        "#9A8F35", "#F3C01A", "#F7E578",
+        "#5A3518", "#924D26",
+        "#CCBC84", "#E9D3A0",
+        "#B92027", "#EF3E28"
+    ],
+    "Winter": [
+        "#060905", "#384450", "#D7D3D2", "#E6E2DF",
+        "#161B42", "#262973", "#414AA1", "#258DC9",
+        "#047C49", "#1FAA6D",
+        "#F5EA16", "#F9EF77", "#FCF9C4",
+        "#AB1F67", "#EE1C24"
+    ]
+}
+
+
+# RGB → HSV
+
+def hex_to_hsv(hex_color):
+    rgb = np.array(mcolors.to_rgb(hex_color))
+    return mcolors.rgb_to_hsv(rgb)
+
+
+# LẤY HSV VÙNG DA (GIỮA MẶT)
+
+def extract_skin_hsv(image):
+    img = np.array(image.convert("RGB")) / 255.0
+    h, w, _ = img.shape
+
+    # vùng trung tâm khuôn mặt
+    y1, y2 = int(h * 0.3), int(h * 0.6)
+    x1, x2 = int(w * 0.35), int(w * 0.65)
+
+    region = img[y1:y2, x1:x2]
+    hsv = mcolors.rgb_to_hsv(region)
+
+    # Hue (0–360), S, V
+    return hsv[..., 0].mean() * 360, hsv[..., 1].mean(), hsv[..., 2].mean()
+
+
+# XÁC ĐỊNH MÙA (RULE-BASED)
+
+def detect_season(hsv):
+    h, s, v = hsv
+
+    if 15 <= h <= 50:
+        return "Spring" if v > 0.6 else "Autumn"
+    else:
+        return "Summer" if s < 0.5 else "Winter"
+
+
+# CHỌN 4 MÀU THEO VAI TRÒ
+
+def pick_4_colors(colors):
+    hsv_colors = [(c, hex_to_hsv(c)) for c in colors]
+
+    # Primary: bão hòa cao
+    primary = max(hsv_colors, key=lambda x: x[1][1])[0]
+
+    # Neutral: bão hòa thấp
+    neutral = min(hsv_colors, key=lambda x: x[1][1])[0]
+
+    remain = [c for c in colors if c not in [primary, neutral]]
+    accent1 = remain[0]
+    accent2 = remain[1]
+
+    return {
+        "Primary": primary,
+        "Accent 1": accent1,
+        "Accent 2": accent2,
+        "Neutral": neutral
     }
-    .season-text { color: #0097a7; font-size: 3.5rem; font-weight: 800; }
-    .swatch { height: 120px; border-radius: 15px; box-shadow: 0 8px 15px rgba(0,0,0,0.1); margin-top: 10px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-#  Khởi tạo Model (Tự động train lại nếu thiếu đặc trưng)
-path = "features_csv"
-if not os.path.exists(path): os.makedirs(path)
-model_path, le_path = f"{path}/combined_model.pkl", f"{path}/le.pkl"
 
 
-def init_model():
-    clf_init = DecisionTreeClassifier()
-    clf_init.fit(np.random.rand(4, 24), [0, 1, 2, 3])  # 24 đặc trưng (RGB + HSV)
-    le_init = LabelEncoder()
-    le_init.fit(["Spring", "Summer", "Autumn", "Winter"])
-    joblib.dump(clf_init, model_path);
-    joblib.dump(le_init, le_path)
-    return clf_init, le_init
+# UI
 
+uploaded = st.file_uploader("📸 Tải ảnh khuôn mặt", type=["jpg", "png", "jpeg"])
 
-if not os.path.exists(model_path):
-    clf, le = init_model()
+if uploaded:
+    image = Image.open(uploaded)
+    st.image(image, width=280)
+
+    skin_hsv = extract_skin_hsv(image)
+    season = detect_season(skin_hsv)
+
+    st.subheader(f"🌿 Personal Color của bạn: **{season}**")
+
+    palette = pick_4_colors(SEASON_PALETTE[season])
+    cols = st.columns(4)
+
+    for col, (role, color) in zip(cols, palette.items()):
+        with col:
+            st.markdown(
+                f"""
+                <div style="
+                    background:{color};
+                    height:150px;
+                    border-radius:18px;
+                    box-shadow:0 8px 18px rgba(0,0,0,0.15)">
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            st.markdown(f"**{role}**")
+            st.caption(color)
 else:
-    clf = joblib.load(model_path)
-    le = joblib.load(le_path)
-
-
-# Hàm xử lý RGB và HSV
-def preprocess_image(img_pil):
-    img_rgb = np.array(img_pil.convert("RGB"))
-    img_hsv = mcolors.rgb_to_hsv(img_rgb / 255.0)
-    h, w, _ = img_rgb.shape
-    # Lấy mẫu 4 vùng (Da, Mắt, Lông mày, Tóc)
-    regions = [(int(h * 0.3), int(h * 0.7), int(w * 0.3), int(w * 0.7)),
-               (int(h * 0.25), int(h * 0.45), int(w * 0.25), int(w * 0.75)),
-               (int(h * 0.2), int(h * 0.3), int(w * 0.25), int(w * 0.75)),
-               (0, int(h * 0.2), 0, w)]
-    features = []
-    for (y1, y2, x1, x2) in regions:
-        features.extend(img_rgb[y1:y2, x1:x2].mean(axis=(0, 1)))
-        features.extend(img_hsv[y1:y2, x1:x2].mean(axis=(0, 1)))
-    return np.array(features).reshape(1, -1)
-
-
-#  Giao diện người dùng
-st.markdown("<h1 style='text-align:center;'> Personal Color</h1>", unsafe_allow_html=True)
-st.markdown('<div class="main-card">', unsafe_allow_html=True)
-
-col1, col2 = st.columns([1, 1], gap="large")
-
-with col1:
-    uploaded_file = st.file_uploader("Tải ảnh chân dung", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
-    if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, use_container_width=True, caption="Ảnh của bạn")
-
-with col2:
-    if uploaded_file:
-        data = preprocess_image(image)
-        try:
-            pred_idx = clf.predict(data)[0]
-        except:  # Nếu model cũ không khớp 24 đặc trưng thì train lại
-            clf, le = init_model()
-            pred_idx = clf.predict(data)[0]
-
-        predicted_season = le.inverse_transform([pred_idx])[0]
-
-        st.markdown(f"<h3>Bạn thuộc mùa:</h3>", unsafe_allow_html=True)
-        st.markdown(f'<div class="season-text">{predicted_season} ✨</div>', unsafe_allow_html=True)
-
-        # Bảng màu
-        palettes = {
-            "Spring": ["#FFDAB9", "#FFE4B5", "#FFB6C1", "#F0E68C"],
-            "Summer": ["#ADD8E6", "#87CEFA", "#B0C4DE", "#E6E6FA"],
-            "Autumn": ["#D2691E", "#CD853F", "#F4A460", "#DEB887"],
-            "Winter": ["#2F4F4F", "#556B2F", "#8B0000", "#4682B4"]
-        }
-        st.write("### Palette gợi ý:")
-        p_cols = st.columns(4)
-        for i, color in enumerate(palettes.get(predicted_season, ["#FFF"])):
-            p_cols[i].markdown(f'<div class="swatch" style="background:{color};"></div>', unsafe_allow_html=True)
-            p_cols[i].caption(color)
-
-st.markdown('</div>', unsafe_allow_html=True)
+    st.info("⬆️ Upload ảnh để hệ thống phân tích tone da")
