@@ -1,4 +1,14 @@
+<<<<<<< HEAD
 streamlit
 numpy
 pillow
 matplotlib
+=======
+streamlit
+numpy
+pillow
+joblib
+scikit-learn
+matplotlib
+
+>>>>>>> 7dd425463003e99df2693e7f2b9b62b424abadac
